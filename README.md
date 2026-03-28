@@ -1,43 +1,138 @@
 # CpCaseStudy
 
-TODO: Delete this and the text below, and describe your gem
-
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/cp_case_study`. To experiment with that code, run `bin/console` for an interactive prompt.
+A configurable CSV processing pipeline with composable transform and validation rules. Process CSV records through an ordered chain of rules that transform field values or validate them, collecting all errors instead of stopping on the first.
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
+Add this line to your application's Gemfile:
 
-Install the gem and add to the application's Gemfile by executing:
-
-```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+```ruby
+gem "cp_case_study"
 ```
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+Then run:
 
 ```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+bundle install
+```
+
+Or install it directly:
+
+```bash
+gem install cp_case_study
 ```
 
 ## Usage
 
-TODO: Write usage instructions here
+### Basic Pipeline
+
+Define a pipeline by mapping column names (as symbols) to an ordered list of rules. Rules run in sequence — each transform feeds its output to the next rule, and validations accumulate errors without halting the chain.
+
+```ruby
+require "cp_case_study"
+
+config = CpCaseStudy::Configuration.new(
+  email: [
+    CpCaseStudy::Transforms::NormalizeEmail.new,
+    CpCaseStudy::Validations::Presence.new,
+    CpCaseStudy::Validations::Format.new(/.+@.+\..+/)
+  ],
+  name: [
+    CpCaseStudy::Transforms::DefaultValue.new("Unknown"),
+    CpCaseStudy::Validations::Presence.new
+  ]
+)
+
+pipeline = CpCaseStudy::Pipeline.new(config)
+result = pipeline.call("data.csv")
+```
+
+### Inspecting Results
+
+```ruby
+result.valid?        # => true if every row passed all validations
+result.rows          # => array of RowResult structs
+result.valid_rows    # => rows with no errors
+result.invalid_rows  # => rows with at least one error
+result.errors        # => [{ row: 2, field: :email, message: "can't be blank" }, ...]
+
+row = result.rows.first
+row.row_number       # => 1 (1-indexed)
+row.data             # => { email: "alice@example.com", name: "Alice" }
+row.errors           # => []
+row.valid?           # => true
+```
+
+### Built-in Rules
+
+**Transforms** modify field values:
+
+| Class | Description |
+|---|---|
+| `Transforms::NormalizeEmail` | Strips whitespace and downcases |
+| `Transforms::DefaultValue` | Replaces nil/blank values with a default |
+
+**Validations** check field values and collect errors:
+
+| Class | Description |
+|---|---|
+| `Validations::Presence` | Fails if nil, empty, or whitespace-only |
+| `Validations::Format` | Fails if value doesn't match the given regex |
+
+The `Format` validation accepts an optional custom message:
+
+```ruby
+CpCaseStudy::Validations::Format.new(/\A\d{3}-\d{4}\z/, message: "must be ###-#### format")
+```
+
+### Custom Rules
+
+Any object that inherits from `CpCaseStudy::Rule` and responds to `#call(value)` returning a `CpCaseStudy::Result` works as a rule. Two convenience base classes reduce boilerplate:
+
+**Custom transform** — override `#transform(value)`:
+
+```ruby
+class Titleize < CpCaseStudy::Transform
+  def transform(value)
+    value.to_s.split.map(&:capitalize).join(" ")
+  end
+end
+```
+
+**Custom validation** — override `#valid?(value)` and `#message`:
+
+```ruby
+class MinLength < CpCaseStudy::Validation
+  def initialize(min)
+    super()
+    @min = min
+  end
+
+  private
+
+  def valid?(value)
+    value.to_s.length >= @min
+  end
+
+  def message
+    "must be at least #{@min} characters"
+  end
+end
+```
+
+Use them like any built-in rule:
+
+```ruby
+config = CpCaseStudy::Configuration.new(
+  name: [Titleize.new, MinLength.new(2)]
+)
+pipeline = CpCaseStudy::Pipeline.new(config)
+```
 
 ## Development
 
 After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
-
-## Contributing
-
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/cp_case_study. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](https://github.com/[USERNAME]/cp_case_study/blob/master/CODE_OF_CONDUCT.md).
-
 ## License
 
 The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
-
-## Code of Conduct
-
-Everyone interacting in the CpCaseStudy project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/[USERNAME]/cp_case_study/blob/master/CODE_OF_CONDUCT.md).
