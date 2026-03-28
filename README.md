@@ -2,6 +2,16 @@
 
 A configurable CSV processing pipeline with composable transform and validation rules. Process CSV records through an ordered chain of rules that transform field values or validate them, collecting all errors instead of stopping on the first.
 
+## Design Decisions
+
+I have decided to go with a simple approach, more Object-Oriented without brining too much complexity. 
+While it also makes sense to implement a DSL (as AI suggested), so it looks like dry-validation, but I decided not to go with this approach since it may be too complex for a simple solution for now.
+
+My approach has a main processor - Pipeline, which needs a configuration. Configuration is a class that has a set of rules and can return relevant rules for the field.
+I made it as a separate entity. In this case we also can implement some sort of DslConfiguration which also has to follow the same interface(with `#rules` and `#rules_for` instace methods), and we can use it with the current setup without a hassle
+
+I think the biggest problem that still exists is an ability to inject custom code inside process_row or being able to use Enumerable just to omit having all loaded records from CSV in memory
+ 
 ## Installation
 
 Add this line to your application's Gemfile:
